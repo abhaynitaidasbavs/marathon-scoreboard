@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Search, TrendingUp, BookOpen, Award, LogOut, Plus, Edit2, Trash2, Download, Users } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+import { Search, TrendingUp, BookOpen, Award, LogOut, Plus, Edit2, Trash2, Download, Users, Filter, X } from 'lucide-react';
 import { 
   auth, 
   loginUser, 
@@ -25,6 +25,8 @@ const BOOK_VALUES = {
   SB: 0.25
 };
 
+const COLORS = ['#f97316', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+
 const App = () => {
   const [teams, setTeams] = useState([]);
   const [leaders, setLeaders] = useState([]);
@@ -42,7 +44,6 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Listen to auth state changes
   useEffect(() => {
     const unsubscribe = onAuthChange((user) => {
       setIsAdmin(!!user);
@@ -51,7 +52,6 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  // Listen to teams changes
   useEffect(() => {
     const unsubscribe = getTeams((teamsData) => {
       setTeams(teamsData);
@@ -59,7 +59,6 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  // Load leaders
   useEffect(() => {
     const loadLeaders = async () => {
       try {
@@ -72,7 +71,6 @@ const App = () => {
     loadLeaders();
   }, []);
 
-  // Calculate points and books for a team
   const calculateStats = (books) => {
     let totalBooks = 0;
     let totalPoints = 0;
@@ -84,7 +82,6 @@ const App = () => {
     return { totalBooks, totalPoints };
   };
 
-  // Get teams with calculated stats
   const getTeamsWithStats = () => {
     return teams.map(team => ({
       ...team,
@@ -92,7 +89,6 @@ const App = () => {
     }));
   };
 
-  // Filter and sort teams
   const getFilteredTeams = () => {
     let filtered = getTeamsWithStats();
 
@@ -117,7 +113,6 @@ const App = () => {
     return filtered;
   };
 
-  // Admin login
   const handleLogin = async () => {
     try {
       setError('');
@@ -131,7 +126,6 @@ const App = () => {
     }
   };
 
-  // Admin logout
   const handleLogout = async () => {
     try {
       await logoutUser();
@@ -141,7 +135,6 @@ const App = () => {
     }
   };
 
-  // Add/Edit team
   const handleSaveTeam = async (teamData) => {
     try {
       if (editingTeam) {
@@ -157,7 +150,6 @@ const App = () => {
     }
   };
 
-  // Delete team
   const handleDeleteTeam = async (id) => {
     if (window.confirm('Are you sure you want to delete this team?')) {
       try {
@@ -169,7 +161,6 @@ const App = () => {
     }
   };
 
-  // Add leader
   const handleAddLeader = async () => {
     if (newLeader && !leaders.includes(newLeader)) {
       try {
@@ -183,7 +174,6 @@ const App = () => {
     }
   };
 
-  // Delete leader
   const handleDeleteLeader = async (leader) => {
     if (window.confirm(`Remove ${leader} from the list?`)) {
       try {
@@ -200,22 +190,21 @@ const App = () => {
     }
   };
 
-  // Export to CSV
   const exportToCSV = () => {
-    const teamsWithStats = getTeamsWithStats();
+    const teamsWithStats = getFilteredTeams();
     const headers = ['Rank', 'Team Name', 'BV Leader', 'Bhagavatam', 'CC', 'MBB', 'BB', 'MB', 'SB', 'Total Books', 'Total Points'];
     const rows = teamsWithStats.map((team, idx) => [
       idx + 1,
       team.name,
       team.leader,
-      team.books.Bhagavatam,
-      team.books.CC,
-      team.books.MBB,
-      team.books.BB,
-      team.books.MB,
-      team.books.SB,
+      team.books.Bhagavatam || 0,
+      team.books.CC || 0,
+      team.books.MBB || 0,
+      team.books.BB || 0,
+      team.books.MB || 0,
+      team.books.SB || 0,
       team.totalBooks,
-      team.totalPoints
+      team.totalPoints.toFixed(2)
     ]);
     
     const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
@@ -229,66 +218,78 @@ const App = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <div className="w-20 h-20 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-lg text-gray-600 font-medium">Loading Marathon Scoreboard...</p>
         </div>
       </div>
     );
   }
 
   const filteredTeams = getFilteredTeams();
+  const teamsWithStats = getTeamsWithStats();
+  const totalTeams = teams.length;
+  const totalBooks = teamsWithStats.reduce((sum, t) => sum + t.totalBooks, 0);
+  const totalPoints = teamsWithStats.reduce((sum, t) => sum + t.totalPoints, 0);
+
   const chartData = filteredTeams.slice(0, 10).map((team) => ({
-    name: team.name,
+    name: team.name.length > 15 ? team.name.substring(0, 15) + '...' : team.name,
     points: team.totalPoints,
     books: team.totalBooks
   }));
 
+  const bookDistribution = Object.keys(BOOK_VALUES).map(bookType => ({
+    name: bookType,
+    value: teamsWithStats.reduce((sum, team) => sum + (team.books[bookType] || 0), 0)
+  })).filter(item => item.value > 0);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50">
       {/* Header */}
-      <header className="bg-white shadow-md border-b-4 border-orange-500">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+      <header className="bg-white shadow-lg border-b-4 border-orange-500 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center">
-                <BookOpen className="w-8 h-8 text-white" />
+              <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg transform hover:scale-105 transition-transform">
+                <BookOpen className="w-9 h-9 text-white" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-orange-600">Marathon Scoreboard</h1>
-                <p className="text-sm text-gray-600">ISKCON Book Distribution Campaign</p>
+                <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-orange-600 to-orange-500 bg-clip-text text-transparent">
+                  Marathon Scoreboard
+                </h1>
+                <p className="text-sm text-gray-600 font-medium mt-1">ISKCON Book Distribution Campaign</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-3">
               {isAdmin ? (
                 <>
                   <button
                     onClick={() => setShowLeaderManager(true)}
-                    className="px-4 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 flex items-center gap-2"
+                    className="px-4 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all flex items-center gap-2 font-medium"
                   >
                     <Users className="w-4 h-4" />
-                    Manage Leaders
+                    <span className="hidden sm:inline">Leaders</span>
                   </button>
                   <button
                     onClick={() => setShowAddTeam(true)}
-                    className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 flex items-center gap-2"
+                    className="px-4 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all flex items-center gap-2 font-medium"
                   >
                     <Plus className="w-4 h-4" />
-                    Add Team
+                    <span className="hidden sm:inline">Add Team</span>
                   </button>
                   <button
                     onClick={handleLogout}
-                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 flex items-center gap-2"
+                    className="px-4 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all flex items-center gap-2 font-medium"
                   >
                     <LogOut className="w-4 h-4" />
-                    Logout
+                    <span className="hidden sm:inline">Logout</span>
                   </button>
                 </>
               ) : (
                 <button
                   onClick={() => setShowLogin(true)}
-                  className="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 font-semibold"
+                  className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all font-semibold"
                 >
                   Admin Login
                 </button>
@@ -298,24 +299,59 @@ const App = () => {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
-        {/* Filters and Controls */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl shadow-xl p-6 text-white transform hover:scale-105 transition-transform">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-orange-100 text-sm font-medium mb-1">Total Teams</p>
+                <p className="text-5xl font-bold">{totalTeams}</p>
+              </div>
+              <Award className="w-16 h-16 text-orange-200 opacity-80" />
+            </div>
+          </div>
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-xl p-6 text-white transform hover:scale-105 transition-transform">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100 text-sm font-medium mb-1">Total Books</p>
+                <p className="text-5xl font-bold">{totalBooks.toLocaleString()}</p>
+              </div>
+              <BookOpen className="w-16 h-16 text-blue-200 opacity-80" />
+            </div>
+          </div>
+          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-xl p-6 text-white transform hover:scale-105 transition-transform">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-green-100 text-sm font-medium mb-1">Total Points</p>
+                <p className="text-5xl font-bold">{totalPoints.toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
+              </div>
+              <TrendingUp className="w-16 h-16 text-green-200 opacity-80" />
+            </div>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <Filter className="w-5 h-5 text-orange-600" />
+            <h3 className="text-lg font-bold text-gray-800">Filters & Search</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="relative">
-              <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search teams..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
               />
             </div>
             <select
               value={filterLeader}
               onChange={(e) => setFilterLeader(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all font-medium"
             >
               <option value="all">All Leaders</option>
               {leaders.map(leader => (
@@ -325,130 +361,215 @@ const App = () => {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all font-medium"
             >
-              <option value="points">Sort by Points</option>
-              <option value="books">Sort by Total Books</option>
+              <option value="points">🏆 Sort by Points</option>
+              <option value="books">📚 Sort by Total Books</option>
             </select>
             <button
               onClick={exportToCSV}
-              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center justify-center gap-2"
+              className="px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 font-medium"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-5 h-5" />
               Export CSV
             </button>
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-orange-100 text-sm">Total Teams</p>
-                <p className="text-4xl font-bold">{teams.length}</p>
+        {/* Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          {/* Bar Chart */}
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+              <TrendingUp className="w-6 h-6 text-orange-600" />
+              Top 10 Teams Performance
+            </h2>
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} tick={{fontSize: 12}} />
+                  <YAxis tick={{fontSize: 12}} />
+                  <Tooltip 
+                    contentStyle={{
+                      backgroundColor: 'white',
+                      border: '2px solid #f97316',
+                      borderRadius: '12px',
+                      padding: '12px'
+                    }}
+                  />
+                  <Legend wrapperStyle={{paddingTop: '20px'}} />
+                  <Bar dataKey="points" fill="#f97316" name="Points" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="books" fill="#3b82f6" name="Books" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-80 flex items-center justify-center text-gray-400">
+                <p>No data available</p>
               </div>
-              <Award className="w-12 h-12 text-orange-200" />
-            </div>
+            )}
           </div>
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-100 text-sm">Total Books</p>
-                <p className="text-4xl font-bold">{getTeamsWithStats().reduce((sum, t) => sum + t.totalBooks, 0)}</p>
-              </div>
-              <BookOpen className="w-12 h-12 text-blue-200" />
-            </div>
-          </div>
-          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-100 text-sm">Total Points</p>
-                <p className="text-4xl font-bold">{getTeamsWithStats().reduce((sum, t) => sum + t.totalPoints, 0).toFixed(2)}</p>
-              </div>
-              <TrendingUp className="w-12 h-12 text-green-200" />
-            </div>
-          </div>
-        </div>
 
-        {/* Analytics Chart */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">Top 10 Teams Performance</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="points" fill="#f97316" name="Points" />
-              <Bar dataKey="books" fill="#3b82f6" name="Books" />
-            </BarChart>
-          </ResponsiveContainer>
+          {/* Pie Chart */}
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+              <BookOpen className="w-6 h-6 text-orange-600" />
+              Book Distribution Breakdown
+            </h2>
+            {bookDistribution.length > 0 ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <PieChart>
+                  <Pie
+                    data={bookDistribution}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={(entry) => `${entry.name}: ${entry.value}`}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {bookDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-80 flex items-center justify-center text-gray-400">
+                <p>No data available</p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Scoreboard Table */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4">
+            <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+              <Award className="w-6 h-6" />
+              Team Rankings
+            </h2>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-orange-500 text-white">
+              <thead className="bg-gray-50 border-b-2 border-orange-500">
                 <tr>
-                  <th className="px-6 py-4 text-left">Rank</th>
-                  <th className="px-6 py-4 text-left">Team Name</th>
-                  <th className="px-6 py-4 text-left">BV Leader</th>
-                  <th className="px-6 py-4 text-center">Bhagavatam</th>
-                  <th className="px-6 py-4 text-center">CC</th>
-                  <th className="px-6 py-4 text-center">MBB</th>
-                  <th className="px-6 py-4 text-center">BB</th>
-                  <th className="px-6 py-4 text-center">MB</th>
-                  <th className="px-6 py-4 text-center">SB</th>
-                  <th className="px-6 py-4 text-center">Total Books</th>
-                  <th className="px-6 py-4 text-center">Total Points</th>
-                  {isAdmin && <th className="px-6 py-4 text-center">Actions</th>}
+                  <th className="px-6 py-4 text-left text-sm font-bold text-gray-700 uppercase">Rank</th>
+                  <th className="px-6 py-4 text-left text-sm font-bold text-gray-700 uppercase">Team Name</th>
+                  <th className="px-6 py-4 text-left text-sm font-bold text-gray-700 uppercase">BV Leader</th>
+                  <th className="px-4 py-4 text-center text-sm font-bold text-gray-700 uppercase">Bhag</th>
+                  <th className="px-4 py-4 text-center text-sm font-bold text-gray-700 uppercase">CC</th>
+                  <th className="px-4 py-4 text-center text-sm font-bold text-gray-700 uppercase">MBB</th>
+                  <th className="px-4 py-4 text-center text-sm font-bold text-gray-700 uppercase">BB</th>
+                  <th className="px-4 py-4 text-center text-sm font-bold text-gray-700 uppercase">MB</th>
+                  <th className="px-4 py-4 text-center text-sm font-bold text-gray-700 uppercase">SB</th>
+                  <th className="px-6 py-4 text-center text-sm font-bold text-gray-700 uppercase">Total Books</th>
+                  <th className="px-6 py-4 text-center text-sm font-bold text-gray-700 uppercase">Total Points</th>
+                  {isAdmin && <th className="px-6 py-4 text-center text-sm font-bold text-gray-700 uppercase">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredTeams.length === 0 ? (
                   <tr>
-                    <td colSpan={isAdmin ? 12 : 11} className="px-6 py-8 text-center text-gray-500">
-                      No teams found. {isAdmin && "Click 'Add Team' to get started!"}
+                    <td colSpan={isAdmin ? 12 : 11} className="px-6 py-16 text-center">
+                      <div className="flex flex-col items-center gap-4">
+                        <BookOpen className="w-16 h-16 text-gray-300" />
+                        <p className="text-xl text-gray-500 font-medium">No teams found</p>
+                        {isAdmin && (
+                          <button
+                            onClick={() => setShowAddTeam(true)}
+                            className="px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all font-medium"
+                          >
+                            Add Your First Team
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ) : (
                   filteredTeams.map((team, idx) => (
                     <tr key={team.id} className="hover:bg-orange-50 transition-colors">
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className={`font-bold ${idx === 0 ? 'text-yellow-500 text-2xl' : idx === 1 ? 'text-gray-400 text-xl' : idx === 2 ? 'text-orange-600 text-xl' : 'text-gray-700'}`}>
-                            {idx + 1}
-                          </span>
-                          {idx < 3 && <Award className={`w-5 h-5 ${idx === 0 ? 'text-yellow-500' : idx === 1 ? 'text-gray-400' : 'text-orange-600'}`} />}
+                        <div className="flex items-center gap-3">
+                          {idx < 3 ? (
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+                              idx === 0 ? 'bg-yellow-400 text-yellow-900' : 
+                              idx === 1 ? 'bg-gray-300 text-gray-700' : 
+                              'bg-orange-400 text-orange-900'
+                            }`}>
+                              {idx + 1}
+                            </div>
+                          ) : (
+                            <span className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-600">
+                              {idx + 1}
+                            </span>
+                          )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 font-semibold text-gray-800">{team.name}</td>
-                      <td className="px-6 py-4 text-gray-600">{team.leader}</td>
-                      <td className="px-6 py-4 text-center">{team.books.Bhagavatam || 0}</td>
-                      <td className="px-6 py-4 text-center">{team.books.CC || 0}</td>
-                      <td className="px-6 py-4 text-center">{team.books.MBB || 0}</td>
-                      <td className="px-6 py-4 text-center">{team.books.BB || 0}</td>
-                      <td className="px-6 py-4 text-center">{team.books.MB || 0}</td>
-                      <td className="px-6 py-4 text-center">{team.books.SB || 0}</td>
-                      <td className="px-6 py-4 text-center font-bold text-blue-600">{team.totalBooks}</td>
-                      <td className="px-6 py-4 text-center font-bold text-green-600">{team.totalPoints.toFixed(2)}</td>
+                      <td className="px-6 py-4">
+                        <span className="font-semibold text-gray-800 text-base">{team.name}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-gray-600 font-medium">{team.leader}</span>
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <span className="inline-block px-3 py-1 bg-purple-100 text-purple-800 rounded-lg font-semibold">
+                          {team.books.Bhagavatam || 0}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-lg font-semibold">
+                          {team.books.CC || 0}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-lg font-semibold">
+                          {team.books.MBB || 0}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-lg font-semibold">
+                          {team.books.BB || 0}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <span className="inline-block px-3 py-1 bg-pink-100 text-pink-800 rounded-lg font-semibold">
+                          {team.books.MB || 0}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-800 rounded-lg font-semibold">
+                          {team.books.SB || 0}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="inline-block px-4 py-2 bg-blue-500 text-white rounded-lg font-bold text-lg">
+                          {team.totalBooks}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="inline-block px-4 py-2 bg-green-500 text-white rounded-lg font-bold text-lg">
+                          {team.totalPoints.toFixed(2)}
+                        </span>
+                      </td>
                       {isAdmin && (
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => { setEditingTeam(team); setShowAddTeam(true); }}
-                              className="p-2 text-blue-600 hover:bg-blue-100 rounded"
+                              className="p-2.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                              title="Edit Team"
                             >
-                              <Edit2 className="w-4 h-4" />
+                              <Edit2 className="w-5 h-5" />
                             </button>
                             <button
                               onClick={() => handleDeleteTeam(team.id)}
-                              className="p-2 text-red-600 hover:bg-red-100 rounded"
+                              className="p-2.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                              title="Delete Team"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-5 h-5" />
                             </button>
                           </div>
                         </td>
@@ -464,45 +585,44 @@ const App = () => {
 
       {/* Login Modal */}
       {showLogin && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Admin Login</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full transform transition-all">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-3xl font-bold text-gray-800">Admin Login</h2>
+              <button
+                onClick={() => { setShowLogin(false); setError(''); }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6 text-gray-500" />
+              </button>
+            </div>
             {error && (
-              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-                {error}
+              <div className="mb-6 p-4 bg-red-50 border-2 border-red-200 text-red-700 rounded-xl flex items-center gap-2">
+                <span className="font-medium">{error}</span>
               </div>
             )}
-            <div>
-              <div className="mb-4">
-                <label className="block text-gray-700 mb-2">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                />
-              </div>
-              <div className="mb-6">
-                <label className="block text-gray-700 mb-2">Password</label>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-gray-700 mb-2 font-medium">Password</label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                  placeholder="Enter password"
                 />
               </div>
-              <div className="flex gap-4">
+              <div className="flex gap-4 pt-4">
                 <button
                   onClick={handleLogin}
-                  className="flex-1 bg-orange-500 text-white py-2 rounded-lg hover:bg-orange-600 font-semibold"
+                  className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white py-3 rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all font-semibold text-lg"
                 >
                   Login
                 </button>
                 <button
                   onClick={() => { setShowLogin(false); setError(''); }}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
+                  className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl hover:bg-gray-300 transition-all font-semibold"
                 >
                   Cancel
                 </button>
@@ -524,39 +644,51 @@ const App = () => {
 
       {/* Leader Manager Modal */}
       {showLeaderManager && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Manage BV Leaders</h2>
-            <div className="mb-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full transform transition-all">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-3xl font-bold text-gray-800">Manage Leaders</h2>
+              <button
+                onClick={() => setShowLeaderManager(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6 text-gray-500" />
+              </button>
+            </div>
+            <div className="mb-6">
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={newLeader}
                   onChange={(e) => setNewLeader(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleAddLeader()}
-                  placeholder="New leader name"
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="Enter leader name"
+                  className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
                 />
                 <button
                   onClick={handleAddLeader}
-                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+                  className="px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all font-semibold"
                 >
                   Add
                 </button>
               </div>
             </div>
-            <div className="space-y-2 mb-6 max-h-60 overflow-y-auto">
+            <div className="space-y-2 mb-6 max-h-80 overflow-y-auto">
               {leaders.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No leaders added yet</p>
+                <div className="text-center py-12">
+                  <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 font-medium">No leaders added yet</p>
+                </div>
               ) : (
                 leaders.map(leader => (
-                  <div key={leader} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <span>{leader}</span>
+                  <div key={leader} className="flex items-center justify-between p-4 bg-gradient-to-r from-orange-50 to-white border-2 border-orange-100 rounded-xl hover:shadow-md transition-all">
+                    <span className="font-semibold text-gray-800">{leader}</span>
                     <button
                       onClick={() => handleDeleteLeader(leader)}
-                      className="text-red-600 hover:text-red-800"
+                      className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                      title="Remove Leader"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-5 h-5" />
                     </button>
                   </div>
                 ))
@@ -564,7 +696,7 @@ const App = () => {
             </div>
             <button
               onClick={() => setShowLeaderManager(false)}
-              className="w-full bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
+              className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl hover:bg-gray-300 transition-all font-semibold"
             >
               Close
             </button>
@@ -588,6 +720,10 @@ const TeamForm = ({ team, leaders, onSave, onCancel }) => {
       alert('Please enter a team name');
       return;
     }
+    if (!formData.leader) {
+      alert('Please select a BV Leader');
+      return;
+    }
     onSave(formData);
   };
 
@@ -599,28 +735,38 @@ const TeamForm = ({ team, leaders, onSave, onCancel }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg shadow-xl p-8 max-w-2xl w-full my-8">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">
-          {team ? 'Edit Team' : 'Add New Team'}
-        </h2>
-        <div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-3xl w-full my-8 transform transition-all">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-3xl font-bold text-gray-800">
+            {team ? 'Edit Team' : 'Add New Team'}
+          </h2>
+          <button
+            onClick={onCancel}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X className="w-6 h-6 text-gray-500" />
+          </button>
+        </div>
+        
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-gray-700 mb-2">Team Name</label>
+              <label className="block text-gray-700 mb-2 font-semibold">Team Name *</label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                placeholder="Enter team name"
               />
             </div>
             <div>
-              <label className="block text-gray-700 mb-2">BV Leader</label>
+              <label className="block text-gray-700 mb-2 font-semibold">BV Leader *</label>
               <select
                 value={formData.leader}
                 onChange={(e) => setFormData({ ...formData, leader: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all font-medium"
               >
                 {leaders.length === 0 ? (
                   <option value="">No leaders available</option>
@@ -633,36 +779,43 @@ const TeamForm = ({ team, leaders, onSave, onCancel }) => {
             </div>
           </div>
           
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Book Distribution</h3>
+          <div>
+            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <BookOpen className="w-6 h-6 text-orange-600" />
+              Book Distribution
+            </h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {Object.keys(BOOK_VALUES).map(bookType => (
-                <div key={bookType}>
-                  <label className="block text-gray-700 mb-2">
-                    {bookType} ({BOOK_VALUES[bookType]} pts)
+                <div key={bookType} className="bg-gradient-to-br from-orange-50 to-white border-2 border-orange-100 rounded-xl p-4 hover:shadow-md transition-all">
+                  <label className="block text-gray-700 mb-2 font-semibold text-sm">
+                    {bookType}
+                    <span className="ml-2 text-xs text-orange-600 font-bold">
+                      ({BOOK_VALUES[bookType]} pts)
+                    </span>
                   </label>
                   <input
                     type="number"
                     min="0"
                     value={formData.books[bookType]}
                     onChange={(e) => handleBookChange(bookType, e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all font-bold text-lg text-center"
+                    placeholder="0"
                   />
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex gap-4 pt-6">
             <button
               onClick={handleSubmit}
-              className="flex-1 bg-orange-500 text-white py-3 rounded-lg hover:bg-orange-600 font-semibold"
+              className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white py-4 rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all font-bold text-lg"
             >
               {team ? 'Update Team' : 'Add Team'}
             </button>
             <button
               onClick={onCancel}
-              className="flex-1 bg-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-400"
+              className="flex-1 bg-gray-200 text-gray-700 py-4 rounded-xl hover:bg-gray-300 transition-all font-bold text-lg"
             >
               Cancel
             </button>
@@ -673,4 +826,15 @@ const TeamForm = ({ team, leaders, onSave, onCancel }) => {
   );
 };
 
-export default App;
+export default App;="block text-gray-700 mb-2 font-medium">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                  placeholder="admin@iskcon.org"
+                />
+              </div>
+              <div>
+                <label className
