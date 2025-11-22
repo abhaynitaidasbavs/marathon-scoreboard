@@ -14,7 +14,7 @@ import {
   addLeader,
   deleteLeader
 } from './firebase';
-
+//
 // Book point values
 const BOOK_VALUES = {
   Bhagavatam: 72,
