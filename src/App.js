@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
-import { Search, TrendingUp, BookOpen, Award, LogOut, Plus, Edit2, Trash2, Download, Users, Filter, X } from 'lucide-react';
+import { Search, TrendingUp, BookOpen, Award, LogOut, Plus, Edit2, Trash2, Download, Users, Filter, X, Minus } from 'lucide-react';
 import { 
   auth, 
   loginUser, 
@@ -23,6 +23,16 @@ const BOOK_VALUES = {
   BB: 1,
   MB: 0.5,
   SB: 0.25
+};
+
+// Book equivalence mapping for counting "total books" in MBB-equivalents
+const BOOK_EQUIV = {
+  Bhagavatam: 18, // 1 Bhagavatam == 18 MBB
+  CC: 9,          // 1 CC == 9 MBB
+  MBB: 1,
+  BB: 1,
+  MB: 1,
+  SB: 1
 };
 
 const COLORS = ['#f97316', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
@@ -71,13 +81,14 @@ const App = () => {
     loadLeaders();
   }, []);
 
-  const calculateStats = (books) => {
+  const calculateStats = (books = {}) => {
     let totalBooks = 0;
     let totalPoints = 0;
-    Object.keys(books).forEach(bookType => {
+    Object.keys(BOOK_VALUES).forEach(bookType => {
       const count = books[bookType] || 0;
-      totalBooks += count;
-      totalPoints += count * BOOK_VALUES[bookType];
+      // Points use BOOK_VALUES, totalBooks uses MBB-equivalents
+      totalPoints += count * (BOOK_VALUES[bookType] || 0);
+      totalBooks += count * (BOOK_EQUIV[bookType] || 0);
     });
     return { totalBooks, totalPoints };
   };
@@ -85,8 +96,29 @@ const App = () => {
   const getTeamsWithStats = () => {
     return teams.map(team => ({
       ...team,
-      ...calculateStats(team.books)
+      books: team.books || {},
+      ...calculateStats(team.books || {})
     }));
+  };
+
+  // Update a single book count for a team (admin action)
+  const handleUpdateBookCount = async (teamId, bookType, delta) => {
+    try {
+      const team = teams.find(t => t.id === teamId);
+      if (!team) return;
+      const currentBooks = team.books || {};
+      const newCount = Math.max(0, (currentBooks[bookType] || 0) + delta);
+      const newBooks = { ...currentBooks, [bookType]: newCount };
+
+      // Optimistically update UI
+      setTeams(prev => prev.map(t => t.id === teamId ? { ...t, books: newBooks } : t));
+
+      // Persist change
+      await updateTeam(teamId, { books: newBooks });
+    } catch (err) {
+      console.error('Error updating book count:', err);
+      alert('Failed to update book count. Please try again.');
+    }
   };
 
   const getFilteredTeams = () => {
@@ -515,34 +547,166 @@ const App = () => {
                         <span className="text-gray-600 font-medium">{team.leader}</span>
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <span className="inline-block px-3 py-1 bg-purple-100 text-purple-800 rounded-lg font-semibold">
-                          {team.books.Bhagavatam || 0}
-                        </span>
+                        {isAdmin ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleUpdateBookCount(team.id, 'Bhagavatam', -1)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Decrement Bhagavatam"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <span className="inline-block px-3 py-1 bg-purple-100 text-purple-800 rounded-lg font-semibold">
+                              {team.books?.Bhagavatam || 0}
+                            </span>
+                            <button
+                              onClick={() => handleUpdateBookCount(team.id, 'Bhagavatam', 1)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Increment Bhagavatam"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="inline-block px-3 py-1 bg-purple-100 text-purple-800 rounded-lg font-semibold">
+                            {team.books.Bhagavatam || 0}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-lg font-semibold">
-                          {team.books.CC || 0}
-                        </span>
+                        {isAdmin ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleUpdateBookCount(team.id, 'CC', -1)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Decrement CC"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-lg font-semibold">
+                              {team.books?.CC || 0}
+                            </span>
+                            <button
+                              onClick={() => handleUpdateBookCount(team.id, 'CC', 1)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Increment CC"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-lg font-semibold">
+                            {team.books.CC || 0}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-lg font-semibold">
-                          {team.books.MBB || 0}
-                        </span>
+                        {isAdmin ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleUpdateBookCount(team.id, 'MBB', -1)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Decrement MBB"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-lg font-semibold">
+                              {team.books?.MBB || 0}
+                            </span>
+                            <button
+                              onClick={() => handleUpdateBookCount(team.id, 'MBB', 1)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Increment MBB"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-lg font-semibold">
+                            {team.books.MBB || 0}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-lg font-semibold">
-                          {team.books.BB || 0}
-                        </span>
+                        {isAdmin ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleUpdateBookCount(team.id, 'BB', -1)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Decrement BB"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-lg font-semibold">
+                              {team.books?.BB || 0}
+                            </span>
+                            <button
+                              onClick={() => handleUpdateBookCount(team.id, 'BB', 1)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Increment BB"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-lg font-semibold">
+                            {team.books.BB || 0}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <span className="inline-block px-3 py-1 bg-pink-100 text-pink-800 rounded-lg font-semibold">
-                          {team.books.MB || 0}
-                        </span>
+                        {isAdmin ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleUpdateBookCount(team.id, 'MB', -1)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Decrement MB"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <span className="inline-block px-3 py-1 bg-pink-100 text-pink-800 rounded-lg font-semibold">
+                              {team.books?.MB || 0}
+                            </span>
+                            <button
+                              onClick={() => handleUpdateBookCount(team.id, 'MB', 1)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Increment MB"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="inline-block px-3 py-1 bg-pink-100 text-pink-800 rounded-lg font-semibold">
+                            {team.books.MB || 0}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-800 rounded-lg font-semibold">
-                          {team.books.SB || 0}
-                        </span>
+                        {isAdmin ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleUpdateBookCount(team.id, 'SB', -1)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Decrement SB"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-800 rounded-lg font-semibold">
+                              {team.books?.SB || 0}
+                            </span>
+                            <button
+                              onClick={() => handleUpdateBookCount(team.id, 'SB', 1)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Increment SB"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-800 rounded-lg font-semibold">
+                            {team.books.SB || 0}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span className="inline-block px-4 py-2 bg-blue-500 text-white rounded-lg font-bold text-lg">
@@ -715,6 +879,14 @@ const TeamForm = ({ team, leaders, onSave, onCancel }) => {
     leader: leaders[0] || '',
     books: { Bhagavatam: 0, CC: 0, MBB: 0, BB: 0, MB: 0, SB: 0 }
   });
+
+  useEffect(() => {
+    setFormData(team || {
+      name: '',
+      leader: leaders[0] || '',
+      books: { Bhagavatam: 0, CC: 0, MBB: 0, BB: 0, MB: 0, SB: 0 }
+    });
+  }, [team, leaders]);
 
   const handleSubmit = () => {
     if (!formData.name.trim()) {
