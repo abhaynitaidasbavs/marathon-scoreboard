@@ -50,6 +50,7 @@ const App = () => {
   const [showAddTeam, setShowAddTeam] = useState(false);
   const [editingTeam, setEditingTeam] = useState(null);
   const [showLeaderManager, setShowLeaderManager] = useState(false);
+  const [showEditTeams, setShowEditTeams] = useState(false);
   const [newLeader, setNewLeader] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -302,6 +303,13 @@ const App = () => {
                   >
                     <Users className="w-4 h-4" />
                     <span className="hidden sm:inline">Leaders</span>
+                  </button>
+                  <button
+                    onClick={() => setShowEditTeams(true)}
+                    className="px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all flex items-center gap-2 font-medium"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">Edit Teams</span>
                   </button>
                   <button
                     onClick={() => setShowAddTeam(true)}
@@ -868,6 +876,25 @@ const App = () => {
           </div>
         </div>
       )}
+
+      {/* Edit Teams Modal */}
+      {showEditTeams && (
+        <EditTeamsModal
+          teams={teams}
+          onUpdate={async (updates) => {
+            try {
+              for (const { teamId, books } of updates) {
+                await updateTeam(teamId, { books });
+              }
+              setShowEditTeams(false);
+            } catch (err) {
+              console.error('Error updating teams:', err);
+              alert('Failed to update teams. Please try again.');
+            }
+          }}
+          onCancel={() => setShowEditTeams(false)}
+        />
+      )}
     </div>
   );
 };
@@ -879,6 +906,8 @@ const TeamForm = ({ team, leaders, onSave, onCancel }) => {
     leader: leaders[0] || '',
     books: { Bhagavatam: 0, CC: 0, MBB: 0, BB: 0, MB: 0, SB: 0 }
   });
+  const [leaderSearchTerm, setLeaderSearchTerm] = useState('');
+  const [showLeaderDropdown, setShowLeaderDropdown] = useState(false);
 
   useEffect(() => {
     setFormData(team || {
@@ -887,6 +916,10 @@ const TeamForm = ({ team, leaders, onSave, onCancel }) => {
       books: { Bhagavatam: 0, CC: 0, MBB: 0, BB: 0, MB: 0, SB: 0 }
     });
   }, [team, leaders]);
+
+  const filteredLeaders = leaders.filter(leader =>
+    leader.toLowerCase().includes(leaderSearchTerm.toLowerCase())
+  );
 
   const handleSubmit = () => {
     if (!formData.name.trim()) {
@@ -905,6 +938,12 @@ const TeamForm = ({ team, leaders, onSave, onCancel }) => {
       ...formData,
       books: { ...formData.books, [bookType]: parseInt(value) || 0 }
     });
+  };
+
+  const handleLeaderSelect = (leader) => {
+    setFormData({ ...formData, leader });
+    setLeaderSearchTerm('');
+    setShowLeaderDropdown(false);
   };
 
   return (
@@ -934,21 +973,38 @@ const TeamForm = ({ team, leaders, onSave, onCancel }) => {
                 placeholder="Enter team name"
               />
             </div>
-            <div>
+            <div className="relative">
               <label className="block text-gray-700 mb-2 font-semibold">BV Leader *</label>
-              <select
-                value={formData.leader}
-                onChange={(e) => setFormData({ ...formData, leader: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all font-medium"
-              >
-                {leaders.length === 0 ? (
-                  <option value="">No leaders available</option>
-                ) : (
-                  leaders.map(leader => (
-                    <option key={leader} value={leader}>{leader}</option>
-                  ))
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={leaderSearchTerm || formData.leader}
+                  onChange={(e) => {
+                    setLeaderSearchTerm(e.target.value);
+                    setShowLeaderDropdown(true);
+                  }}
+                  onFocus={() => setShowLeaderDropdown(true)}
+                  placeholder="Search for BV Leader..."
+                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                />
+                {showLeaderDropdown && filteredLeaders.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                    {filteredLeaders.map(leader => (
+                      <button
+                        key={leader}
+                        onClick={() => handleLeaderSelect(leader)}
+                        className="w-full px-4 py-3 text-left hover:bg-orange-50 transition-colors border-b border-gray-100 last:border-b-0"
+                      >
+                        {leader}
+                      </button>
+                    ))}
+                  </div>
                 )}
-              </select>
+              </div>
+              {leaders.length === 0 && (
+                <p className="text-sm text-red-500 mt-1">No leaders available. Please add leaders first.</p>
+              )}
             </div>
           </div>
           
@@ -993,6 +1049,185 @@ const TeamForm = ({ team, leaders, onSave, onCancel }) => {
               Cancel
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Edit Teams Modal Component
+const EditTeamsModal = ({ teams, onUpdate, onCancel }) => {
+  const [teamSearchTerm, setTeamSearchTerm] = useState('');
+  const [teamEdits, setTeamEdits] = useState({});
+
+  useEffect(() => {
+    // Initialize edits with current team data
+    const initialEdits = {};
+    teams.forEach(team => {
+      initialEdits[team.id] = {
+        ...(team.books || { Bhagavatam: 0, CC: 0, MBB: 0, BB: 0, MB: 0, SB: 0 })
+      };
+    });
+    setTeamEdits(initialEdits);
+  }, [teams]);
+
+  const filteredTeams = teams.filter(team =>
+    team.name.toLowerCase().includes(teamSearchTerm.toLowerCase())
+  );
+
+  const handleBookChange = (teamId, bookType, value) => {
+    setTeamEdits(prev => ({
+      ...prev,
+      [teamId]: {
+        ...prev[teamId],
+        [bookType]: Math.max(0, parseInt(value) || 0)
+      }
+    }));
+  };
+
+  const handleIncrement = (teamId, bookType, delta) => {
+    setTeamEdits(prev => ({
+      ...prev,
+      [teamId]: {
+        ...prev[teamId],
+        [bookType]: Math.max(0, (prev[teamId]?.[bookType] || 0) + delta)
+      }
+    }));
+  };
+
+  const handleUpdate = () => {
+    const updates = Object.keys(teamEdits).map(teamId => {
+      const team = teams.find(t => t.id === teamId);
+      if (!team) return null;
+      
+      return {
+        teamId,
+        books: teamEdits[teamId]
+      };
+    }).filter(Boolean);
+
+    onUpdate(updates);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-7xl w-full my-8 transform transition-all">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-3xl font-bold text-gray-800">Edit Teams</h2>
+          <button
+            onClick={onCancel}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X className="w-6 h-6 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="mb-6">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              value={teamSearchTerm}
+              onChange={(e) => setTeamSearchTerm(e.target.value)}
+              placeholder="Search teams..."
+              className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+            />
+          </div>
+        </div>
+
+        <div className="max-h-[60vh] overflow-y-auto mb-6">
+          <div className="space-y-4">
+            {filteredTeams.length === 0 ? (
+              <div className="text-center py-12">
+                <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500 font-medium">No teams found</p>
+              </div>
+            ) : (
+              filteredTeams.map(team => (
+                <div key={team.id} className="bg-gradient-to-br from-orange-50 to-white border-2 border-orange-100 rounded-xl p-6 hover:shadow-md transition-all">
+                  <h3 className="text-xl font-bold text-gray-800 mb-4">{team.name}</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    {Object.keys(BOOK_VALUES).map(bookType => (
+                      <div key={bookType} className="bg-white rounded-lg p-4 border-2 border-gray-200">
+                        <label className="block text-gray-700 mb-2 font-semibold text-sm">
+                          {bookType}
+                        </label>
+                        <div className="flex items-center gap-2 mb-2">
+                          <button
+                            onClick={() => handleIncrement(team.id, bookType, -10)}
+                            className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors font-bold"
+                            title="Decrement by 10"
+                          >
+                            -10
+                          </button>
+                          <button
+                            onClick={() => handleIncrement(team.id, bookType, -1)}
+                            className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors font-bold"
+                            title="Decrement by 1"
+                          >
+                            -1
+                          </button>
+                          <input
+                            type="number"
+                            min="0"
+                            value={teamEdits[team.id]?.[bookType] || 0}
+                            onChange={(e) => handleBookChange(team.id, bookType, e.target.value)}
+                            className="flex-1 px-2 py-1 border-2 border-gray-200 rounded text-center font-bold text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                          />
+                          <button
+                            onClick={() => handleIncrement(team.id, bookType, 1)}
+                            className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors font-bold"
+                            title="Increment by 1"
+                          >
+                            +1
+                          </button>
+                          <button
+                            onClick={() => handleIncrement(team.id, bookType, 10)}
+                            className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors font-bold"
+                            title="Increment by 10"
+                          >
+                            +10
+                          </button>
+                        </div>
+                        <div className="text-xs text-gray-500 text-center">
+                          <input
+                            type="number"
+                            placeholder="Custom"
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                const value = parseInt(e.target.value);
+                                if (!isNaN(value)) {
+                                  handleIncrement(team.id, bookType, value);
+                                  e.target.value = '';
+                                }
+                              }
+                            }}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs focus:ring-1 focus:ring-orange-500 focus:border-orange-500"
+                          />
+                          <span className="block mt-1">Press Enter</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="flex gap-4 pt-6 border-t-2 border-gray-200">
+          <button
+            onClick={handleUpdate}
+            className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white py-4 rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all font-bold text-lg"
+          >
+            Update All Teams
+          </button>
+          <button
+            onClick={onCancel}
+            className="flex-1 bg-gray-200 text-gray-700 py-4 rounded-xl hover:bg-gray-300 transition-all font-bold text-lg"
+          >
+            Cancel
+          </button>
         </div>
       </div>
     </div>
