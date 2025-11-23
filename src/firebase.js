@@ -9,7 +9,8 @@ const firebaseConfig = {
   projectId: "marathon-scoreboard",
   storageBucket: "marathon-scoreboard.firebasestorage.app",
   messagingSenderId: "262815758528",
-  appId: "1:262815758528:web:2989a673a54c7272bc9525"
+  appId: "1:262815758528:web:2989a673a54c7272bc9525",
+  measurementId: "G-T17MQYD2LL"
 };
 
 // Initialize Firebase
