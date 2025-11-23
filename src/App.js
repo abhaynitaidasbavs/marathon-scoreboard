@@ -1152,47 +1152,17 @@ const EditTeamsModal = ({ teams, onUpdate, onCancel }) => {
                         <label className="block text-gray-700 mb-2 font-semibold text-sm">
                           {bookType}
                         </label>
-                        <div className="flex items-center gap-2 mb-2">
-                          <button
-                            onClick={() => handleIncrement(team.id, bookType, -10)}
-                            className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors font-bold"
-                            title="Decrement by 10"
-                          >
-                            -10
-                          </button>
-                          <button
-                            onClick={() => handleIncrement(team.id, bookType, -1)}
-                            className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors font-bold"
-                            title="Decrement by 1"
-                          >
-                            -1
-                          </button>
-                          <input
-                            type="number"
-                            min="0"
-                            value={teamEdits[team.id]?.[bookType] || 0}
-                            onChange={(e) => handleBookChange(team.id, bookType, e.target.value)}
-                            className="flex-1 px-2 py-1 border-2 border-gray-200 rounded text-center font-bold text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                          />
-                          <button
-                            onClick={() => handleIncrement(team.id, bookType, 1)}
-                            className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors font-bold"
-                            title="Increment by 1"
-                          >
-                            +1
-                          </button>
-                          <button
-                            onClick={() => handleIncrement(team.id, bookType, 10)}
-                            className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors font-bold"
-                            title="Increment by 10"
-                          >
-                            +10
-                          </button>
-                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          value={teamEdits[team.id]?.[bookType] || 0}
+                          onChange={(e) => handleBookChange(team.id, bookType, e.target.value)}
+                          className="w-full px-3 py-2 border-2 border-gray-200 rounded text-center font-bold text-base focus:ring-2 focus:ring-orange-500 focus:border-orange-500 mb-2"
+                        />
                         <div className="text-xs text-gray-500 text-center">
                           <input
                             type="number"
-                            placeholder="Custom"
+                            placeholder="Custom increment"
                             onKeyPress={(e) => {
                               if (e.key === 'Enter') {
                                 const value = parseInt(e.target.value);
@@ -1204,7 +1174,7 @@ const EditTeamsModal = ({ teams, onUpdate, onCancel }) => {
                             }}
                             className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs focus:ring-1 focus:ring-orange-500 focus:border-orange-500"
                           />
-                          <span className="block mt-1">Press Enter</span>
+                          <span className="block mt-1">Press Enter to apply</span>
                         </div>
                       </div>
                     ))}
