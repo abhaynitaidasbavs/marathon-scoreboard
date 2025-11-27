@@ -54,6 +54,9 @@ const App = () => {
   const [newLeader, setNewLeader] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showDateSelector, setShowDateSelector] = useState(false);
+  const [showAdminUpdateScore, setShowAdminUpdateScore] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthChange((user) => {
@@ -82,24 +85,63 @@ const App = () => {
     loadLeaders();
   }, []);
 
-  const calculateStats = (books = {}) => {
+  const calculateStats = (booksData = {}, specificDate = null) => {
     let totalBooks = 0;
     let totalPoints = 0;
-    Object.keys(BOOK_VALUES).forEach(bookType => {
-      const count = books[bookType] || 0;
-      // Points use BOOK_VALUES, totalBooks uses MBB-equivalents
-      totalPoints += count * (BOOK_VALUES[bookType] || 0);
-      totalBooks += count * (BOOK_EQUIV[bookType] || 0);
-    });
+    
+    // If booksData is the old format (direct book counts), convert it
+    if (!Array.isArray(booksData) && typeof booksData === 'object') {
+      const bookCounts = booksData;
+      Object.keys(BOOK_VALUES).forEach(bookType => {
+        const count = bookCounts[bookType] || 0;
+        totalPoints += count * (BOOK_VALUES[bookType] || 0);
+        totalBooks += count * (BOOK_EQUIV[bookType] || 0);
+      });
+      return { totalBooks, totalPoints };
+    }
+
+    // If booksData is new format (array of dated entries), filter by date if provided
+    if (Array.isArray(booksData)) {
+      const filteredEntries = specificDate 
+        ? booksData.filter(entry => entry.date === specificDate)
+        : booksData;
+
+      filteredEntries.forEach(entry => {
+        Object.keys(BOOK_VALUES).forEach(bookType => {
+          const count = entry[bookType] || 0;
+          totalPoints += count * (BOOK_VALUES[bookType] || 0);
+          totalBooks += count * (BOOK_EQUIV[bookType] || 0);
+        });
+      });
+    }
+
     return { totalBooks, totalPoints };
   };
 
-  const getTeamsWithStats = () => {
-    return teams.map(team => ({
-      ...team,
-      books: team.books || {},
-      ...calculateStats(team.books || {})
-    }));
+  const getTeamsWithStats = (dateFilter = null) => {
+    return teams.map(team => {
+      let booksData = team.booksHistory || team.books || {};
+      
+      // Handle legacy format - convert if needed
+      if (!Array.isArray(booksData) && typeof booksData === 'object' && !booksData.date) {
+        // It's the old format - just return as is
+        const stats = calculateStats(booksData, dateFilter);
+        return {
+          ...team,
+          books: booksData,
+          booksHistory: [{ date: selectedDate, ...booksData }],
+          ...stats
+        };
+      }
+      
+      const stats = calculateStats(booksData, dateFilter);
+      return {
+        ...team,
+        booksHistory: Array.isArray(booksData) ? booksData : [{ date: selectedDate, ...booksData }],
+        books: Array.isArray(booksData) ? {} : booksData,
+        ...stats
+      };
+    });
   };
 
   // Update a single book count for a team (admin action)
@@ -123,7 +165,7 @@ const App = () => {
   };
 
   const getFilteredTeams = () => {
-    let filtered = getTeamsWithStats();
+    let filtered = getTeamsWithStats(selectedDate);
 
     if (searchTerm) {
       filtered = filtered.filter(team =>
@@ -135,6 +177,7 @@ const App = () => {
       filtered = filtered.filter(team => team.leader === filterLeader);
     }
 
+    // Always sort based on selected metric
     filtered.sort((a, b) => {
       if (sortBy === 'points') {
         return b.totalPoints - a.totalPoints;
@@ -261,16 +304,26 @@ const App = () => {
   }
 
   const filteredTeams = getFilteredTeams();
-  const teamsWithStats = getTeamsWithStats();
+  const teamsWithStats = getTeamsWithStats(selectedDate);
   const totalTeams = teams.length;
   const totalBooks = teamsWithStats.reduce((sum, t) => sum + t.totalBooks, 0);
   const totalPoints = teamsWithStats.reduce((sum, t) => sum + t.totalPoints, 0);
 
-  const chartData = filteredTeams.slice(0, 10).map((team) => ({
-    name: team.name.length > 15 ? team.name.substring(0, 15) + '...' : team.name,
-    points: team.totalPoints,
-    books: team.totalBooks
-  }));
+  // Sort chart data based on selected metric
+  const chartData = filteredTeams
+    .slice(0, 10)
+    .sort((a, b) => {
+      if (sortBy === 'points') {
+        return b.totalPoints - a.totalPoints;
+      } else {
+        return b.totalBooks - a.totalBooks;
+      }
+    })
+    .map((team) => ({
+      name: team.name.length > 15 ? team.name.substring(0, 15) + '...' : team.name,
+      points: team.totalPoints,
+      books: team.totalBooks
+    }));
 
   const bookDistribution = Object.keys(BOOK_VALUES).map(bookType => ({
     name: bookType,
@@ -297,6 +350,13 @@ const App = () => {
             <div className="flex flex-wrap items-center gap-3">
               {isAdmin ? (
                 <>
+                  <button
+                    onClick={() => setShowAdminUpdateScore(true)}
+                    className="px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all flex items-center gap-2 font-medium"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">Update Scores</span>
+                  </button>
                   <button
                     onClick={() => setShowLeaderManager(true)}
                     className="px-4 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all flex items-center gap-2 font-medium"
@@ -377,7 +437,7 @@ const App = () => {
             <Filter className="w-5 h-5 text-orange-600" />
             <h3 className="text-lg font-bold text-gray-800">Filters & Search</h3>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -406,6 +466,14 @@ const App = () => {
               <option value="points">🏆 Sort by Points</option>
               <option value="books">📚 Sort by Total Books</option>
             </select>
+            {!isAdmin && (
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all font-medium"
+              />
+            )}
             <button
               onClick={exportToCSV}
               className="px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 font-medium"
@@ -422,7 +490,7 @@ const App = () => {
           <div className="bg-white rounded-2xl shadow-lg p-6">
             <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
               <TrendingUp className="w-6 h-6 text-orange-600" />
-              Top 10 Teams Performance
+              Top 10 Teams Performance ({sortBy === 'points' ? '🏆 Points' : '📚 Books'})
             </h2>
             {chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={320}>
@@ -439,8 +507,11 @@ const App = () => {
                     }}
                   />
                   <Legend wrapperStyle={{paddingTop: '20px'}} />
-                  <Bar dataKey="points" fill="#f97316" name="Points" radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="books" fill="#3b82f6" name="Books" radius={[8, 8, 0, 0]} />
+                  {sortBy === 'points' ? (
+                    <Bar dataKey="points" fill="#f97316" name="Points" radius={[8, 8, 0, 0]} />
+                  ) : (
+                    <Bar dataKey="books" fill="#3b82f6" name="Books" radius={[8, 8, 0, 0]} />
+                  )}
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -895,6 +966,43 @@ const App = () => {
           onCancel={() => setShowEditTeams(false)}
         />
       )}
+
+      {/* Admin Update Score by Date Modal */}
+      {showAdminUpdateScore && (
+        <AdminUpdateScoreModal
+          teams={teams}
+          onUpdate={async (updates) => {
+            try {
+              for (const { teamId, date, books } of updates) {
+                const team = teams.find(t => t.id === teamId);
+                if (!team) continue;
+
+                // Get existing history or create new
+                let booksHistory = team.booksHistory || [];
+                if (!Array.isArray(booksHistory)) {
+                  // Convert old format to new format
+                  booksHistory = [{ date: new Date().toISOString().split('T')[0], ...team.books }];
+                }
+
+                // Find or create entry for this date
+                const existingIndex = booksHistory.findIndex(entry => entry.date === date);
+                if (existingIndex >= 0) {
+                  booksHistory[existingIndex] = { date, ...books };
+                } else {
+                  booksHistory.push({ date, ...books });
+                }
+
+                await updateTeam(teamId, { booksHistory, books });
+              }
+              setShowAdminUpdateScore(false);
+            } catch (err) {
+              console.error('Error updating scores:', err);
+              alert('Failed to update scores. Please try again.');
+            }
+          }}
+          onCancel={() => setShowAdminUpdateScore(false)}
+        />
+      )}
     </div>
   );
 };
@@ -1191,6 +1299,153 @@ const EditTeamsModal = ({ teams, onUpdate, onCancel }) => {
             className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white py-4 rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all font-bold text-lg"
           >
             Update All Teams
+          </button>
+          <button
+            onClick={onCancel}
+            className="flex-1 bg-gray-200 text-gray-700 py-4 rounded-xl hover:bg-gray-300 transition-all font-bold text-lg"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Admin Update Score Modal Component
+const AdminUpdateScoreModal = ({ teams, onUpdate, onCancel }) => {
+  const [teamSearchTerm, setTeamSearchTerm] = useState('');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [scoreUpdates, setScoreUpdates] = useState({});
+
+  useEffect(() => {
+    // Initialize with empty scores for all teams
+    const initialUpdates = {};
+    teams.forEach(team => {
+      initialUpdates[team.id] = {
+        Bhagavatam: 0,
+        CC: 0,
+        MBB: 0,
+        BB: 0,
+        MB: 0,
+        SB: 0
+      };
+    });
+    setScoreUpdates(initialUpdates);
+  }, [teams]);
+
+  const filteredTeams = teams.filter(team =>
+    team.name.toLowerCase().includes(teamSearchTerm.toLowerCase())
+  );
+
+  const handleBookChange = (teamId, bookType, value) => {
+    setScoreUpdates(prev => ({
+      ...prev,
+      [teamId]: {
+        ...prev[teamId],
+        [bookType]: Math.max(0, parseInt(value) || 0)
+      }
+    }));
+  };
+
+  const handleUpdate = () => {
+    const updates = Object.keys(scoreUpdates)
+      .filter(teamId => {
+        const books = scoreUpdates[teamId];
+        return Object.values(books).some(val => val > 0);
+      })
+      .map(teamId => ({
+        teamId,
+        date: selectedDate,
+        books: scoreUpdates[teamId]
+      }));
+
+    if (updates.length === 0) {
+      alert('Please enter at least one book count for any team');
+      return;
+    }
+
+    onUpdate(updates);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-7xl w-full my-8 transform transition-all">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-3xl font-bold text-gray-800">Update Scores by Date</h2>
+          <button
+            onClick={onCancel}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X className="w-6 h-6 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-gray-700 font-semibold mb-2">Select Date</label>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+            />
+          </div>
+          <div>
+            <label className="block text-gray-700 font-semibold mb-2">Search Teams</label>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                value={teamSearchTerm}
+                onChange={(e) => setTeamSearchTerm(e.target.value)}
+                placeholder="Search teams..."
+                className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="max-h-[60vh] overflow-y-auto mb-6">
+          <div className="space-y-4">
+            {filteredTeams.length === 0 ? (
+              <div className="text-center py-12">
+                <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500 font-medium">No teams found</p>
+              </div>
+            ) : (
+              filteredTeams.map(team => (
+                <div key={team.id} className="bg-gradient-to-br from-orange-50 to-white border-2 border-orange-100 rounded-xl p-6 hover:shadow-md transition-all">
+                  <h3 className="text-xl font-bold text-gray-800 mb-4">{team.name}</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    {Object.keys(BOOK_VALUES).map(bookType => (
+                      <div key={bookType} className="bg-white rounded-lg p-4 border-2 border-gray-200">
+                        <label className="block text-gray-700 mb-2 font-semibold text-sm">
+                          {bookType}
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={scoreUpdates[team.id]?.[bookType] || 0}
+                          onChange={(e) => handleBookChange(team.id, bookType, e.target.value)}
+                          className="w-full px-3 py-2 border-2 border-gray-200 rounded text-center font-bold text-base focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                          placeholder="0"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="flex gap-4 pt-6 border-t-2 border-gray-200">
+          <button
+            onClick={handleUpdate}
+            className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white py-4 rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all font-bold text-lg"
+          >
+            Update Scores for {selectedDate}
           </button>
           <button
             onClick={onCancel}
