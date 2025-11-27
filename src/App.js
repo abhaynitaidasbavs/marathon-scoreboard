@@ -466,14 +466,12 @@ const App = () => {
               <option value="points">🏆 Sort by Points</option>
               <option value="books">📚 Sort by Total Books</option>
             </select>
-            {!isAdmin && (
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all font-medium"
-              />
-            )}
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all font-medium"
+            />
             <button
               onClick={exportToCSV}
               className="px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:shadow-lg transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 font-medium"
@@ -552,6 +550,134 @@ const App = () => {
                 <p>No data available</p>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Today's Score View Section */}
+        <div className="bg-white rounded-2xl shadow-lg overflow-hidden mb-8">
+          <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4 flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+              <BookOpen className="w-6 h-6" />
+              Book Distribution Score on {selectedDate}
+            </h2>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="px-4 py-2 border-2 border-white rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-white transition-all font-medium bg-white text-gray-800"
+            />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b-2 border-blue-500">
+                <tr>
+                  <th className="px-6 py-4 text-left text-sm font-bold text-gray-700 uppercase">Rank</th>
+                  <th className="px-6 py-4 text-left text-sm font-bold text-gray-700 uppercase">Team Name</th>
+                  <th className="px-6 py-4 text-left text-sm font-bold text-gray-700 uppercase">BV Leader</th>
+                  <th className="px-4 py-4 text-center text-sm font-bold text-gray-700 uppercase">Bhag</th>
+                  <th className="px-4 py-4 text-center text-sm font-bold text-gray-700 uppercase">CC</th>
+                  <th className="px-4 py-4 text-center text-sm font-bold text-gray-700 uppercase">MBB</th>
+                  <th className="px-4 py-4 text-center text-sm font-bold text-gray-700 uppercase">BB</th>
+                  <th className="px-4 py-4 text-center text-sm font-bold text-gray-700 uppercase">MB</th>
+                  <th className="px-4 py-4 text-center text-sm font-bold text-gray-700 uppercase">SB</th>
+                  <th className="px-6 py-4 text-center text-sm font-bold text-gray-700 uppercase">Total Books</th>
+                  <th className="px-6 py-4 text-center text-sm font-bold text-gray-700 uppercase">Total Points</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredTeams.length === 0 ? (
+                  <tr>
+                    <td colSpan="11" className="px-6 py-16 text-center">
+                      <div className="flex flex-col items-center gap-4">
+                        <BookOpen className="w-16 h-16 text-gray-300" />
+                        <p className="text-xl text-gray-500 font-medium">No data for selected date</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTeams.map((team, idx) => {
+                    // Get scores for selected date
+                    let booksData = {};
+                    if (Array.isArray(team.booksHistory)) {
+                      const dateEntry = team.booksHistory.find(entry => entry.date === selectedDate);
+                      booksData = dateEntry ? { ...dateEntry } : {};
+                    } else if (team.books && !Array.isArray(team.books)) {
+                      booksData = team.books;
+                    }
+
+                    const dayStats = calculateStats([{ date: selectedDate, ...booksData }], selectedDate);
+
+                    return (
+                      <tr key={team.id} className="hover:bg-blue-50 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            {idx < 3 ? (
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+                                idx === 0 ? 'bg-yellow-400 text-yellow-900' : 
+                                idx === 1 ? 'bg-gray-300 text-gray-700' : 
+                                'bg-orange-400 text-orange-900'
+                              }`}>
+                                {idx + 1}
+                              </div>
+                            ) : (
+                              <span className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-600">
+                                {idx + 1}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="font-semibold text-gray-800 text-base">{team.name}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-gray-600 font-medium">{team.leader}</span>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <span className="inline-block px-3 py-1 bg-purple-100 text-purple-800 rounded-lg font-semibold">
+                            {booksData.Bhagavatam || 0}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-lg font-semibold">
+                            {booksData.CC || 0}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-lg font-semibold">
+                            {booksData.MBB || 0}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-lg font-semibold">
+                            {booksData.BB || 0}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <span className="inline-block px-3 py-1 bg-pink-100 text-pink-800 rounded-lg font-semibold">
+                            {booksData.MB || 0}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-800 rounded-lg font-semibold">
+                            {booksData.SB || 0}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="inline-block px-4 py-2 bg-blue-500 text-white rounded-lg font-bold text-lg">
+                            {dayStats.totalBooks}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="inline-block px-4 py-2 bg-green-500 text-white rounded-lg font-bold text-lg">
+                            {dayStats.totalPoints.toFixed(2)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 
