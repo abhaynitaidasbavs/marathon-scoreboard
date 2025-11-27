@@ -144,6 +144,33 @@ const App = () => {
     });
   };
 
+  const getAggregateBookCounts = (team) => {
+    // Calculate aggregate book counts across all dates
+    const booksData = team.booksHistory || team.books || {};
+    const aggregateCounts = {
+      Bhagavatam: 0,
+      CC: 0,
+      MBB: 0,
+      BB: 0,
+      MB: 0,
+      SB: 0
+    };
+
+    if (Array.isArray(booksData)) {
+      booksData.forEach(entry => {
+        Object.keys(aggregateCounts).forEach(bookType => {
+          aggregateCounts[bookType] += entry[bookType] || 0;
+        });
+      });
+    } else if (typeof booksData === 'object') {
+      Object.keys(aggregateCounts).forEach(bookType => {
+        aggregateCounts[bookType] = booksData[bookType] || 0;
+      });
+    }
+
+    return aggregateCounts;
+  };
+
   // Update a single book count for a team (admin action)
   const handleUpdateBookCount = async (teamId, bookType, delta) => {
     try {
@@ -166,6 +193,32 @@ const App = () => {
 
   const getFilteredTeams = () => {
     let filtered = getTeamsWithStats(selectedDate);
+
+    if (searchTerm) {
+      filtered = filtered.filter(team =>
+        team.name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    if (filterLeader !== 'all') {
+      filtered = filtered.filter(team => team.leader === filterLeader);
+    }
+
+    // Always sort based on selected metric
+    filtered.sort((a, b) => {
+      if (sortBy === 'points') {
+        return b.totalPoints - a.totalPoints;
+      } else {
+        return b.totalBooks - a.totalBooks;
+      }
+    });
+
+    return filtered;
+  };
+
+  const getAggregateTeams = () => {
+    // Get all-time aggregate data (no date filtering)
+    let filtered = getTeamsWithStats(null);
 
     if (searchTerm) {
       filtered = filtered.filter(team =>
@@ -304,13 +357,14 @@ const App = () => {
   }
 
   const filteredTeams = getFilteredTeams();
+  const aggregateTeams = getAggregateTeams();
   const teamsWithStats = getTeamsWithStats(selectedDate);
   const totalTeams = teams.length;
   const totalBooks = teamsWithStats.reduce((sum, t) => sum + t.totalBooks, 0);
   const totalPoints = teamsWithStats.reduce((sum, t) => sum + t.totalPoints, 0);
 
-  // Sort chart data based on selected metric
-  const chartData = filteredTeams
+  // Sort chart data based on selected metric - use aggregate data
+  const chartData = aggregateTeams
     .slice(0, 10)
     .sort((a, b) => {
       if (sortBy === 'points') {
@@ -708,7 +762,7 @@ const App = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredTeams.length === 0 ? (
+                {aggregateTeams.length === 0 ? (
                   <tr>
                     <td colSpan={isAdmin ? 12 : 11} className="px-6 py-16 text-center">
                       <div className="flex flex-col items-center gap-4">
@@ -726,7 +780,7 @@ const App = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredTeams.map((team, idx) => (
+                  aggregateTeams.map((team, idx) => (
                     <tr key={team.id} className="hover:bg-orange-50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -762,7 +816,7 @@ const App = () => {
                               <Minus className="w-4 h-4" />
                             </button>
                             <span className="inline-block px-3 py-1 bg-purple-100 text-purple-800 rounded-lg font-semibold">
-                              {team.books?.Bhagavatam || 0}
+                              {getAggregateBookCounts(team).Bhagavatam || 0}
                             </span>
                             <button
                               onClick={() => handleUpdateBookCount(team.id, 'Bhagavatam', 1)}
@@ -774,7 +828,7 @@ const App = () => {
                           </div>
                         ) : (
                           <span className="inline-block px-3 py-1 bg-purple-100 text-purple-800 rounded-lg font-semibold">
-                            {team.books.Bhagavatam || 0}
+                            {getAggregateBookCounts(team).Bhagavatam || 0}
                           </span>
                         )}
                       </td>
@@ -789,7 +843,7 @@ const App = () => {
                               <Minus className="w-4 h-4" />
                             </button>
                             <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-lg font-semibold">
-                              {team.books?.CC || 0}
+                              {getAggregateBookCounts(team).CC || 0}
                             </span>
                             <button
                               onClick={() => handleUpdateBookCount(team.id, 'CC', 1)}
@@ -801,7 +855,7 @@ const App = () => {
                           </div>
                         ) : (
                           <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-lg font-semibold">
-                            {team.books.CC || 0}
+                            {getAggregateBookCounts(team).CC || 0}
                           </span>
                         )}
                       </td>
@@ -816,7 +870,7 @@ const App = () => {
                               <Minus className="w-4 h-4" />
                             </button>
                             <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-lg font-semibold">
-                              {team.books?.MBB || 0}
+                              {getAggregateBookCounts(team).MBB || 0}
                             </span>
                             <button
                               onClick={() => handleUpdateBookCount(team.id, 'MBB', 1)}
@@ -828,7 +882,7 @@ const App = () => {
                           </div>
                         ) : (
                           <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-lg font-semibold">
-                            {team.books.MBB || 0}
+                            {getAggregateBookCounts(team).MBB || 0}
                           </span>
                         )}
                       </td>
@@ -843,7 +897,7 @@ const App = () => {
                               <Minus className="w-4 h-4" />
                             </button>
                             <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-lg font-semibold">
-                              {team.books?.BB || 0}
+                              {getAggregateBookCounts(team).BB || 0}
                             </span>
                             <button
                               onClick={() => handleUpdateBookCount(team.id, 'BB', 1)}
@@ -855,7 +909,7 @@ const App = () => {
                           </div>
                         ) : (
                           <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded-lg font-semibold">
-                            {team.books.BB || 0}
+                            {getAggregateBookCounts(team).BB || 0}
                           </span>
                         )}
                       </td>
@@ -870,7 +924,7 @@ const App = () => {
                               <Minus className="w-4 h-4" />
                             </button>
                             <span className="inline-block px-3 py-1 bg-pink-100 text-pink-800 rounded-lg font-semibold">
-                              {team.books?.MB || 0}
+                              {getAggregateBookCounts(team).MB || 0}
                             </span>
                             <button
                               onClick={() => handleUpdateBookCount(team.id, 'MB', 1)}
@@ -882,7 +936,7 @@ const App = () => {
                           </div>
                         ) : (
                           <span className="inline-block px-3 py-1 bg-pink-100 text-pink-800 rounded-lg font-semibold">
-                            {team.books.MB || 0}
+                            {getAggregateBookCounts(team).MB || 0}
                           </span>
                         )}
                       </td>
@@ -897,7 +951,7 @@ const App = () => {
                               <Minus className="w-4 h-4" />
                             </button>
                             <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-800 rounded-lg font-semibold">
-                              {team.books?.SB || 0}
+                              {getAggregateBookCounts(team).SB || 0}
                             </span>
                             <button
                               onClick={() => handleUpdateBookCount(team.id, 'SB', 1)}
@@ -909,7 +963,7 @@ const App = () => {
                           </div>
                         ) : (
                           <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-800 rounded-lg font-semibold">
-                            {team.books.SB || 0}
+                            {getAggregateBookCounts(team).SB || 0}
                           </span>
                         )}
                       </td>
